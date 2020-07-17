@@ -15,6 +15,7 @@ var shaHashID *string
 type RWMutex struct {
 	shaHashID *string
 	lockKey   string
+	uniqID    string
 }
 
 func Init(opt *Options) {
@@ -29,5 +30,7 @@ func NewRWMutex() *RWMutex {
 
 	return &RWMutex{
 		shaHashID: shaHashID,
+		uniqID:    "",
+		lockKey:   "",
 	}
 }
