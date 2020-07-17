@@ -2,8 +2,10 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/wangfeiso/rwlock/lua"
+	"github.com/wangfeiso/rwlock/tool"
 	"strconv"
 	"time"
 )
@@ -25,12 +27,10 @@ var shaHashID string
 
 func Init(opt *redis.Options) {
 	Redis = redis.NewClient(opt)
-	ping, err := Redis.Ping().Result()
+	_, err := Redis.Ping().Result()
 	if err != nil {
+		panic(err)
 		return
-	}
-	if ping != "PONG" {
-
 	}
 	opts = opt
 	currentVersion = strconv.Itoa(int(time.Now().UnixNano() / int64(time.Millisecond)))
@@ -74,26 +74,27 @@ func Lock(key string, uniqID string, expireTime int64) {
 	shaHashID := GetShaHashID()
 	res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
 	if err != nil {
-
+		fmt.Println(err)
+		return
 	}
-	if res.Success() {
+	if res != nil && res.Success() {
 		return
 	}
 	// 如果没有拿到锁，时间驱动
 	for {
 		res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
 		if err != nil {
-
+			handleError(err)
+			continue
 		}
-		if res.IsError() {
-			panic(res.ErrMsg)
+		if res != nil && res.IsError() {
+			panic(res.Error())
 		}
-		if res.Success() {
+		if res != nil && res.Success() {
 			return
 		}
-		// TODO 改成随机
-		time.Sleep(10 * time.Millisecond)
-		break
+
+		time.Sleep(time.Duration(tool.Rand(10, 20)) * time.Millisecond)
 	}
 }
 
@@ -112,7 +113,7 @@ func Unlock(key, uniqID string) {
 
 func RLock(key string) {
 
-	res, err := send(GetShaHashID(), key, "", UnlockCmd, 0)
+	res, err := send(GetShaHashID(), key, "", RLockCmd, 0)
 	if res.Success() {
 		return
 	}
@@ -127,6 +128,7 @@ func RUnlock(key string) {
 		return
 	}
 	if err != nil {
+		panic(err)
 		handleError(err)
 	}
 }
