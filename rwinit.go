@@ -4,12 +4,8 @@ import (
 	"crypto/tls"
 	"github.com/go-redis/redis"
 	"github.com/wangfeiso/rwlock/client"
-	"github.com/wangfeiso/rwlock/tool"
-	"sync"
 	"time"
 )
-
-var shaHashID *string
 
 // 从redis侧拷贝
 type Options struct {
@@ -107,31 +103,4 @@ func Init(opt *Options) {
 	client.Init(&redisOpts)
 	client.InitLua()
 
-}
-
-var l sync.RWMutex
-
-func NewRWMutex() *RWMutex {
-
-	return &RWMutex{
-		uniqID:  tool.GetUUID(),
-		lockKey: tool.GetUUID(),
-		expire:  20,
-	}
-}
-
-func (rw *RWMutex) Lock() {
-	client.Lock(rw.lockKey, rw.uniqID, rw.expire)
-}
-
-func (rw *RWMutex) Unlock() {
-	client.Unlock(rw.lockKey, rw.uniqID)
-}
-
-func (rw *RWMutex) RLock() {
-	client.RLock(rw.lockKey)
-}
-
-func (rw *RWMutex) RUnLock() {
-	client.RUnlock(rw.lockKey)
 }
