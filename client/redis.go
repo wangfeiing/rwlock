@@ -74,9 +74,14 @@ func (r responseLock) Error() string {
 }
 
 func Lock(key string, uniqID string, expireTime int64) {
-	shaHashID := GetShaHashID()
+	if len(key) < 0 {
+		panic("lock key is nil")
+	}
+	if expireTime <= 0 {
+		expireTime = 5
+	}
 	for {
-		res, err := sendLock(shaHashID, key, uniqID, LockCmd, expireTime)
+		res, err := sendLock(GetShaHashID(), key, uniqID, LockCmd, expireTime)
 		if err != nil {
 			handleError(err)
 			time.Sleep(getRandomSleepTime())
@@ -116,12 +121,13 @@ func Unlock(key, uniqID string) {
 func RLock(key string) {
 	for {
 		res, err := sendLock(GetShaHashID(), key, "", RLockCmd, 0)
-		if res.Success() {
+		if res != nil && res.Success() {
 			return
 		}
 		if err != nil {
 			handleError(err)
 		}
+
 		time.Sleep(getRandomSleepTime())
 	}
 }
