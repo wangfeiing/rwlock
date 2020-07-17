@@ -22,28 +22,30 @@ const UnlockCmd = "UNLOCK"
 const RLockCmd = "RLOCK"
 const RUnlockCmd = "RUNLOCK"
 
-var currentVersion = ""
 var shaHashID string
 
-func Init(opt *redis.Options) {
+func Init(opt *redis.Options) error {
 	Redis = redis.NewClient(opt)
-	_, err := Redis.Ping().Result()
-	if err != nil {
-		panic(err)
-		return
+	if _, err := Redis.Ping().Result(); err != nil {
+		return err
 	}
 	opts = opt
-	currentVersion = strconv.Itoa(int(time.Now().UnixNano() / int64(time.Millisecond)))
-	InitLua()
+
+	if err := InitLua(); err != nil {
+		return err
+	}
+	return nil
 }
 
-func InitLua() {
+func InitLua() error {
 	hashID, err := Redis.ScriptLoad(lua.ScriptContent).Result()
 	if err != nil {
-		return
+		return err
 	}
 	fmt.Println(hashID)
 	SetShaHasID(hashID)
+	return nil
+
 }
 func GetShaHashID() string {
 	return shaHashID
@@ -74,9 +76,10 @@ func (r responseLock) Error() string {
 func Lock(key string, uniqID string, expireTime int64) {
 	shaHashID := GetShaHashID()
 	for {
-		res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
+		res, err := sendLock(shaHashID, key, uniqID, LockCmd, expireTime)
 		if err != nil {
 			handleError(err)
+			time.Sleep(getRandomSleepTime())
 			continue
 		}
 		if res != nil && res.IsError() {
@@ -91,21 +94,28 @@ func Lock(key string, uniqID string, expireTime int64) {
 }
 
 func Unlock(key, uniqID string) {
-	res, err := send(GetShaHashID(), key, uniqID, UnlockCmd, 0)
-	if res.Success() {
-		return
-	}
-	if res.IsError() {
-		panic(res.Error())
-	}
-	if err != nil {
-		handleError(err)
+	i := 10
+	for {
+		res, err := sendLock(GetShaHashID(), key, uniqID, UnlockCmd, 0)
+		if res != nil && res.Success() {
+			return
+		}
+		if res != nil && res.IsError() {
+			panic(res.Error())
+		}
+		if err != nil {
+			handleError(err)
+		}
+		if i--; i <= 0 {
+			return
+		}
+		time.Sleep(getRandomSleepTime())
 	}
 }
 
 func RLock(key string) {
 	for {
-		res, err := send(GetShaHashID(), key, "", RLockCmd, 0)
+		res, err := sendLock(GetShaHashID(), key, "", RLockCmd, 0)
 		if res.Success() {
 			return
 		}
@@ -117,13 +127,23 @@ func RLock(key string) {
 }
 
 func RUnlock(key string) {
-	res, err := send(GetShaHashID(), key, "", RUnlockCmd, 0)
-	if res.Success() {
-		return
+	if len(key) <= 0 {
+		panic("runlock nil key")
 	}
-	if err != nil {
-		panic(err)
-		handleError(err)
+	i := 10
+	for {
+		res, err := sendLock(GetShaHashID(), key, "", RUnlockCmd, 0)
+		if res != nil && res.Success() {
+			return
+		}
+		if err != nil {
+			handleError(err)
+		}
+
+		if i--; i <= 0 {
+			return
+		}
+		time.Sleep(getRandomSleepTime())
 	}
 }
 
@@ -131,7 +151,7 @@ func getRandomSleepTime() time.Duration {
 	return time.Duration(tool.Rand(10, 20)) * time.Millisecond
 }
 
-func send(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (*responseLock, error) {
+func sendLock(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (*responseLock, error) {
 	var ret interface{}
 	var err error
 	switch lockCmd {
@@ -154,22 +174,33 @@ func send(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (*res
 	return &res, nil
 }
 
-func handleError(err error) {
-	if err.Error() == EofError {
-		handleEofError()
+func handleError(err error) bool {
+	if err == nil {
+		return false
 	}
-	if err.Error() == NoScriptError {
-		fmt.Println(err.Error())
-		handleNoScriptError()
+	switch err.Error() {
+	case EofError:
+		if err := handleEofError(); err != nil {
+			return false
+		}
+		return true
+	case NoScriptError:
+		if err := handleNoScriptError(); err != nil {
+			return false
+		}
+		return true
+	default:
+		return false
 	}
+
 }
 
 // redis重启
-func handleEofError() {
-	Init(opts)
+func handleEofError() error {
+	return Init(opts)
 }
 
-//script
-func handleNoScriptError() {
-	InitLua()
+// script 不存在
+func handleNoScriptError() error {
+	return InitLua()
 }

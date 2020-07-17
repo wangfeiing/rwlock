@@ -112,8 +112,8 @@ local function unlock()
     -- 如果当前锁不存在
     if ret == false or string.len(ret) <= 0
     then
-        errorString = "Unlock of unlocked RWMutex"
-        return false
+        debugString = "Unlock of unlocked RWMutex"
+        return true
     end
 
     -- 判断当前锁是否不是自己加的
@@ -154,7 +154,7 @@ local function rlock()
     return false
 end
 
-local function runlock(key)
+local function runlock()
     local rlock = get(readLockKey)
     if rlock == false or tonumber(rlock) <= 0
     then

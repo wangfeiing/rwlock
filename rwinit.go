@@ -101,6 +101,4 @@ func Init(opt *Options) {
 		TLSConfig:          opt.TLSConfig,
 	}
 	client.Init(&redisOpts)
-	client.InitLua()
-
 }
