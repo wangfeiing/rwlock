@@ -32,6 +32,6 @@ func (l *RWLock) RLock() {
 	client.RLock(l.lockKey)
 }
 
-func (l *RWLock) RUnlock() {
-	client.RLock(l.lockKey)
+func (l *RWLock) RUnLock() {
+	client.RUnlock(l.lockKey)
 }
