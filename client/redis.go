@@ -20,6 +20,9 @@ const UnlockCmd = "UNLOCK"
 const RLockCmd = "RLOCK"
 const RUnlockCmd = "RUNLOCK"
 
+var currentVersion = ""
+var shaHashID string
+
 func Init(opt *redis.Options) {
 	Redis = redis.NewClient(opt)
 	ping, err := Redis.Ping().Result()
@@ -30,15 +33,22 @@ func Init(opt *redis.Options) {
 
 	}
 	opts = opt
+	currentVersion = strconv.Itoa(int(time.Now().UnixNano() / int64(time.Millisecond)))
 	InitLua()
 }
 
-func InitLua() string {
+func InitLua() {
 	hashID, err := Redis.ScriptLoad(lua.ScriptContent).Result()
 	if err != nil {
-		return ""
+		return
 	}
-	return hashID
+	SetShaHasID(hashID)
+}
+func GetShaHashID() string {
+	return shaHashID
+}
+func SetShaHasID(str string) {
+	shaHashID = str
 }
 
 type responseLock struct {
@@ -60,7 +70,8 @@ func (r responseLock) Error() string {
 	return r.ErrMsg
 }
 
-func Lock(shaHashID, key string, uniqID string, expireTime, retryTime int64) {
+func Lock(key string, uniqID string, expireTime int64) {
+	shaHashID := GetShaHashID()
 	res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
 	if err != nil {
 
@@ -86,8 +97,8 @@ func Lock(shaHashID, key string, uniqID string, expireTime, retryTime int64) {
 	}
 }
 
-func Unlock(shaHashID, key, uniqID string) {
-	res, err := send(shaHashID, key, uniqID, UnlockCmd, 0)
+func Unlock(key, uniqID string) {
+	res, err := send(GetShaHashID(), key, uniqID, UnlockCmd, 0)
 	if res.Success() {
 		return
 	}
@@ -99,8 +110,9 @@ func Unlock(shaHashID, key, uniqID string) {
 	}
 }
 
-func RLock(shaHashID, key string) {
-	res, err := send(shaHashID, key, "", UnlockCmd, 0)
+func RLock(key string) {
+
+	res, err := send(GetShaHashID(), key, "", UnlockCmd, 0)
 	if res.Success() {
 		return
 	}
@@ -109,8 +121,8 @@ func RLock(shaHashID, key string) {
 	}
 }
 
-func RUnlock(shaHashID, key string) {
-	res, err := send(shaHashID, key, "", RUnlockCmd, 0)
+func RUnlock(key string) {
+	res, err := send(GetShaHashID(), key, "", RUnlockCmd, 0)
 	if res.Success() {
 		return
 	}
