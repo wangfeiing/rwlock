@@ -75,7 +75,7 @@ local function lock()
     local ret = get(readLockKey)
     if  ret ~= false and  tonumber(ret) > 0
     then
-        debugString = "read lock number > 0"
+        debugString = "read lock number(".. ret ..") > 0"
         return false
     end
     -- 表示写锁已经被加上

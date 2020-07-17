@@ -42,6 +42,7 @@ func InitLua() {
 	if err != nil {
 		return
 	}
+	fmt.Println(hashID)
 	SetShaHasID(hashID)
 }
 func GetShaHashID() string {
@@ -72,15 +73,6 @@ func (r responseLock) Error() string {
 
 func Lock(key string, uniqID string, expireTime int64) {
 	shaHashID := GetShaHashID()
-	res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if res != nil && res.Success() {
-		return
-	}
-	// 如果没有拿到锁，时间驱动
 	for {
 		res, err := send(shaHashID, key, uniqID, LockCmd, expireTime)
 		if err != nil {
@@ -94,7 +86,7 @@ func Lock(key string, uniqID string, expireTime int64) {
 			return
 		}
 
-		time.Sleep(time.Duration(tool.Rand(10, 20)) * time.Millisecond)
+		time.Sleep(getRandomSleepTime())
 	}
 }
 
@@ -112,13 +104,15 @@ func Unlock(key, uniqID string) {
 }
 
 func RLock(key string) {
-
-	res, err := send(GetShaHashID(), key, "", RLockCmd, 0)
-	if res.Success() {
-		return
-	}
-	if err != nil {
-		handleError(err)
+	for {
+		res, err := send(GetShaHashID(), key, "", RLockCmd, 0)
+		if res.Success() {
+			return
+		}
+		if err != nil {
+			handleError(err)
+		}
+		time.Sleep(getRandomSleepTime())
 	}
 }
 
@@ -131,6 +125,10 @@ func RUnlock(key string) {
 		panic(err)
 		handleError(err)
 	}
+}
+
+func getRandomSleepTime() time.Duration {
+	return time.Duration(tool.Rand(10, 20)) * time.Millisecond
 }
 
 func send(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (*responseLock, error) {
@@ -161,6 +159,7 @@ func handleError(err error) {
 		handleEofError()
 	}
 	if err.Error() == NoScriptError {
+		fmt.Println(err.Error())
 		handleNoScriptError()
 	}
 }
