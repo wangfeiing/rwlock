@@ -1,4 +1,4 @@
-# rwlock-go
+# rwlock
 
 ### 使用方式
 
