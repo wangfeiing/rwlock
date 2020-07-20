@@ -5,7 +5,7 @@
 ``` 
 go get github.com/wangfeiso/rwlock
 ```
-### 说明
+### 特性说明
 
 为确保锁的公平性，用Lua实现了优先级队列FCFS，当多个客户端获取写锁（排它锁）的时候，先到的会先获得锁。
 
