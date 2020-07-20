@@ -9,7 +9,7 @@ local cmdKey  = KEYS[2]
 local queueKey = "_wait_queue__" .. lockKey
 
 -- 判断队列内某个元素是否存在
-local existHashKey = "_wait_queue_hase_set__" .. lockKey
+local existHashKey = "_wait_queue_hash_set__" .. lockKey
 
 -- 锁的唯一ID
 local lockUniqKey = ARGV[1]
@@ -176,9 +176,9 @@ local function countQueue()
     return llen(queueKey)
 end
 
-local function delEle(uniqueID)
-    return lrem(queueKey , 0, uniqueID)
-end
+--local function delEle(uniqueID)
+--    return lrem(queueKey , 0, uniqueID)
+--end
 
 local function isSelf()
 --    如果队列没有元素，直接让自己获取锁
@@ -204,11 +204,13 @@ local function handleLockFail()
         --   读取队列第一个元素
         local frontOne = front()
         --    判断第一个元素是否在线
-        local frontOneOnlie = isOnline(frontOne)
+        local frontOneOnline = isOnline(frontOne)
         -- 如果不在线 就从队列移除
-        if frontOneOnlie == false
+        if frontOneOnline == false
         then
-            delEle(frontOne)
+            deQueue()
+            --从删除hash表中删除
+            hdel(existHashKey, lockUniqKey)
         end
     end
 
@@ -224,6 +226,9 @@ local function handleLockSuccess()
 
     --  删除
     del(onlineKey)
+
+    --从删除 hash 队列中删除
+    hdel(existHashKey, lockUniqKey)
 end
 
 -- write lock
