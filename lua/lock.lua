@@ -13,10 +13,17 @@ local existHashKey = "_wait_queue_hase_set__" .. lockKey
 
 -- 锁的唯一ID
 local lockUniqKey = ARGV[1]
+if ARGV[2] == nil
+then
+    ARGV[2] = "100"
+end
+
+
+local expireNum = tonumber(ARGV[2])
 
 -- 客户端在线监测
 local onlineKey = "_online_exipre_lock_key__" .. lockKey .. "_uniqueID__" ..lockUniqKey
-local expireNum = tonumber(ARGV[2])
+
 
 
 local readLockKey = rProfix .. lockKey
@@ -24,6 +31,10 @@ local writeLockKey = wProfix .. lockKey
 local errorString = ""
 local debugString = ""
 local Ok =  "OK"
+
+local function getOnlineKey(uniqKey)
+    return "_online_exipre_lock_key__" .. lockKey .. "_uniqueID__" .. uniqKey
+end
 
 local function get(key)
     return redis.call("GET", key)
@@ -109,12 +120,29 @@ end
 
 
 -- ------- 公平锁逻辑 ------
--- 队列入队
-local function existQueue(uniqueID)
-    return hexists(existHashKey , uniqueID)
+-- 刷新hearbeat
+local function onlineHeartbeat()
+    set(onlineKey  , 1)
+    expire(onlineKey, 1)
 end
 
-local function enQueue(uniqueID)
+local function isOnline(uniquID)
+    local tmpOnlineKey = getOnlineKey(uniquID)
+    local ret = exists(tmpOnlineKey)
+    if ret > 0
+    then
+        return true
+    end
+    return false
+end
+
+-- 队列入队
+local function existQueue()
+    return hexists(existHashKey , lockUniqKey)
+end
+
+local function enQueue()
+    local uniqueID = lockUniqKey
     local exist =  existQueue(uniqueID)
     if exist
     then
@@ -124,7 +152,7 @@ local function enQueue(uniqueID)
     local ret =  rpush(queueKey , uniqueID)
     if ret <= 0
     then
---      回滚
+--     如果rpush失败，就回滚
         hdel(existHashKey , uniqueID)
         return false
     end
@@ -148,29 +176,61 @@ local function countQueue()
     return llen(queueKey)
 end
 
-local function delEle()
-    return lrem(queueKey , 0, lockUniqKey)
+local function delEle(uniqueID)
+    return lrem(queueKey , 0, uniqueID)
 end
 
--- 刷新hearbeat
-local function onlineHeartbeat()
-    set(onlineKey  , 1)
-    expire(onlineKey, 1)
-end
-
-local function isOnline()
-    local ret = exists(onlineKey)
-    if ret > 0
+local function isSelf()
+--    如果队列没有元素，直接让自己获取锁
+    local count = countQueue()
+    if count == 0
     then
         return true
     end
---  如果
-    delEle()
+
+    local frontOne = front()
+    if frontOne == lockUniqKey
+    then
+        return true
+    end
+    return false
 end
 
 
+local function handleLockFail()
+    local count = countQueue()
+    if count > 0
+    then
+        --   读取队列第一个元素
+        local frontOne = front()
+        --    判断第一个元素是否在线
+        local frontOneOnlie = isOnline(frontOne)
+        -- 如果不在线 就从队列移除
+        if frontOneOnlie == false
+        then
+            delEle(frontOne)
+        end
+    end
+
+--  自身入队
+    enQueue()
+
+end
+--处理加锁成功的情况
+local function handleLockSuccess()
+
+    -- 自身出队
+    deQueue()
+
+    --  删除
+    del(onlineKey)
+end
+
 -- write lock
 local function lock()
+    --   维护一下自己的心跳
+    onlineHeartbeat()
+
     -- 如果有读锁在用
     -- 直接则返回false
     -- 表示上锁失败
@@ -178,6 +238,8 @@ local function lock()
     if  ret ~= false and  tonumber(ret) > 0
     then
         debugString = "read lock number(".. ret ..") > 0"
+--      如果拿不到锁，就进入单独的逻辑处理一下
+        handleLockFail()
         return false
     end
     -- 表示写锁已经被加上
@@ -187,11 +249,19 @@ local function lock()
     if wret ~= false and string.len(wret) > 0
     then
         debugString = "write lock be set by other"
---  todo
---  需要加上入队逻辑
---  公平锁
+--        锁被别人占用了，mmp
+        handleLockFail()
         return false
     end
+--    检查是否轮到自己
+    local isTurnMe = isSelf()
+    if isTurnMe == false
+    then
+        debugString = "lock is free,but not turn me,lockKey="..lockKey.."uniqueID=" .. lockUniqKey
+        handleLockFail()
+        return false
+    end
+
     --  开始加锁
     local incrRet = set(writeLockKey, lockUniqKey)
     if incrRet ~= Ok
@@ -208,7 +278,8 @@ local function lock()
         debugString = "write lock expire fail,key=" .. writeLockKey .. ",expireNum=" .. expireNum
         return false
     end
-
+--    处理加锁成功
+    handleLockSuccess()
     return true
 end
 
@@ -330,6 +401,5 @@ local opRet = handleLock()
 return cjson.encode({
     opRet = opRet,
     debug = debugString,
-    errMsg = errorString,
-    ext = enQueue(lockUniqKey)
+    errMsg = errorString
 })
