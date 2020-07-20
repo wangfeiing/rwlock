@@ -4,7 +4,18 @@ local rProfix = "_read_for_lock__"
 local wProfix = "_write_for_lock__"
 local lockKey = KEYS[1]
 local cmdKey  = KEYS[2]
+
+-- 公平锁队列
+local queueKey = "_wait_queue__" .. lockKey
+
+-- 判断队列内某个元素是否存在
+local existHashKey = "_wait_queue_hase_set__" .. lockKey
+
+-- 锁的唯一ID
 local lockUniqKey = ARGV[1]
+
+-- 客户端在线监测
+local onlineKey = "_online_exipre_lock_key__" .. lockKey .. "_uniqueID__" ..lockUniqKey
 local expireNum = tonumber(ARGV[2])
 
 
@@ -26,6 +37,17 @@ local function hset(key, field, value)
     return  redis.call("HSET", key , field , value)
 end
 
+local function hdel(key, field)
+    return  redis.call("HDEL", key , field)
+end
+local function hexists(key , field)
+    local ret =  redis.call("HEXISTS", key , field )
+    if ret > 0
+    then
+        return true
+    end
+    return false
+end
 local function hgetall(key)
     local ret =  redis.call("HGETALL", key)
     local step = 2
@@ -37,12 +59,8 @@ local function hgetall(key)
     return returnTable
 end
 
-local function hlen(key)
-    return  redis.call("HLEN", key)
-end
-
-local function hdel(key)
-    return  redis.call("HDEL" , key)
+local function llen(key)
+    return  redis.call("LLEN", key)
 end
 
 local function set(key , value)
@@ -67,6 +85,90 @@ local function del(key)
     return  redis.call("DEL" , key)
 end
 
+local function exists(key)
+    return  redis.call("EXISTS" , key)
+end
+
+local function rpush(key , val)
+    return redis.call("RPUSH" , key , val)
+end
+
+local function lpop(key)
+    return redis.call("LPOP",key)
+end
+local function lrem(key, count , val)
+    return redis.call("LREM",key, count, val)
+end
+local function lindex(key , index)
+    return redis.call("LINDEX" , key ,index)
+end
+
+local function range(key , startIdx , endIdx)
+    return redis.call("LRANGE",key ,startIdx ,endIdx)
+end
+
+
+-- ------- 公平锁逻辑 ------
+-- 队列入队
+local function existQueue(uniqueID)
+    return hexists(existHashKey , uniqueID)
+end
+
+local function enQueue(uniqueID)
+    local exist =  existQueue(uniqueID)
+    if exist
+    then
+        return true
+    end
+    hset(existHashKey, uniqueID, 1)
+    local ret =  rpush(queueKey , uniqueID)
+    if ret <= 0
+    then
+--      回滚
+        hdel(existHashKey , uniqueID)
+        return false
+    end
+
+    return true
+end
+
+-- 队列第一个元素出队
+local function deQueue()
+    return lpop(queueKey)
+end
+
+-- 读队列第一个元素
+local function front()
+    return lindex(queueKey , 0)
+end
+
+-- 队列的长度
+
+local function countQueue()
+    return llen(queueKey)
+end
+
+local function delEle()
+    return lrem(queueKey , 0, lockUniqKey)
+end
+
+-- 刷新hearbeat
+local function onlineHeartbeat()
+    set(onlineKey  , 1)
+    expire(onlineKey, 1)
+end
+
+local function isOnline()
+    local ret = exists(onlineKey)
+    if ret > 0
+    then
+        return true
+    end
+--  如果
+    delEle()
+end
+
+
 -- write lock
 local function lock()
     -- 如果有读锁在用
@@ -85,6 +187,9 @@ local function lock()
     if wret ~= false and string.len(wret) > 0
     then
         debugString = "write lock be set by other"
+--  todo
+--  需要加上入队逻辑
+--  公平锁
         return false
     end
     --  开始加锁
@@ -165,6 +270,7 @@ local function runlock()
     return true
 end
 
+-- 处理锁逻辑
 local function handleLock()
     if cmdKey == "LOCK"
     then
@@ -224,5 +330,6 @@ local opRet = handleLock()
 return cjson.encode({
     opRet = opRet,
     debug = debugString,
-    errMsg = errorString
+    errMsg = errorString,
+    ext = enQueue(lockUniqKey)
 })
