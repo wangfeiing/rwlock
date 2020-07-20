@@ -18,15 +18,16 @@ then
     ARGV[2] = "100"
 end
 
-
+--超时时间
 local expireNum = tonumber(ARGV[2])
 
--- 客户端在线监测
-local onlineKey = "_online_exipre_lock_key__" .. lockKey .. "_uniqueID__" ..lockUniqKey
+-- 客户端是否等待监测
+local onlineKey = "_waiting_exipre_lock_key__" .. lockKey .. "_uniqueID__" ..lockUniqKey
 
 
-
+--读锁key
 local readLockKey = rProfix .. lockKey
+--写锁key
 local writeLockKey = wProfix .. lockKey
 local errorString = ""
 local debugString = ""
@@ -210,7 +211,7 @@ local function handleLockFail()
         then
             deQueue()
             --从删除hash表中删除
-            hdel(existHashKey, lockUniqKey)
+            hdel(existHashKey, frontOne)
         end
     end
 
