@@ -1,12 +1,16 @@
 # rwlock-go
 
-###使用方式
+### 使用方式
 
 ``` 
 go get github.com/wangfeiso/rwlock
 ```
+### 说明
 
-###快速使用
+为确保锁的公平性，用Lua实现了优先级队列FCFS，当多个客户端获取写锁（排它锁）的时候，先到的会先获得锁。
+
+
+### 快速使用
 
 ```
 import (
@@ -15,7 +19,7 @@ import (
 
 func main() {
     
-    // init your redis client
+    // 初始化redisip和端口
     // 目前仅仅支持单机
     rwlock.Init(&rwlock.Options{
         Addr: "127.0.0.1:6379",
