@@ -41,10 +41,6 @@ local function get(key)
     return redis.call("GET", key)
 end
 
-local function hget(key , field)
-    return  redis.call("HGET", key, field)
-end
-
 local function hset(key, field, value)
     return  redis.call("HSET", key , field , value)
 end
@@ -52,6 +48,7 @@ end
 local function hdel(key, field)
     return  redis.call("HDEL", key , field)
 end
+
 local function hexists(key , field)
     local ret =  redis.call("HEXISTS", key , field )
     if ret > 0
@@ -59,16 +56,6 @@ local function hexists(key , field)
         return true
     end
     return false
-end
-local function hgetall(key)
-    local ret =  redis.call("HGETALL", key)
-    local step = 2
-    local returnTable = {}
-
-    for i = 1 , table.getn(ret) - 1, step  do
-        returnTable[ret[i]] = ret[i+1]
-    end
-    return returnTable
 end
 
 local function llen(key)
@@ -108,9 +95,11 @@ end
 local function lpop(key)
     return redis.call("LPOP",key)
 end
+
 local function lrem(key, count , val)
     return redis.call("LREM",key, count, val)
 end
+
 local function lindex(key , index)
     return redis.call("LINDEX" , key ,index)
 end
@@ -127,8 +116,8 @@ local function onlineHeartbeat()
     expire(onlineKey, 1)
 end
 
-local function isOnline(uniquID)
-    local tmpOnlineKey = getOnlineKey(uniquID)
+local function isOnline(uniqueID)
+    local tmpOnlineKey = getOnlineKey(uniqueID)
     local ret = exists(tmpOnlineKey)
     if ret > 0
     then
