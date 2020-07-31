@@ -1,4 +1,5 @@
---基于lua的读写锁，可以保证原子性
+-- 基于lua的读写锁，可以保证原子性
+-- Redis对Lua的支持是有限制，不支持require，只能做成单文件
 
 local rProfix = "_read_for_lock__"
 local wProfix = "_write_for_lock__"
