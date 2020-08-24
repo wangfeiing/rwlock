@@ -167,9 +167,6 @@ local function countQueue()
     return llen(queueKey)
 end
 
---local function delEle(uniqueID)
---    return lrem(queueKey , 0, uniqueID)
---end
 
 local function isSelf()
 --    如果队列没有元素，直接让自己获取锁

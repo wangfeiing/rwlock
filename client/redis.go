@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/wangfeiso/rwlock/lua"
 	"github.com/wangfeiso/rwlock/tool"
@@ -17,6 +16,7 @@ var opts *redis.Options
 const NoScriptError = "NOSCRIPT No matching script. Please use EVAL."
 const EofError = "EOF"
 
+// 锁的相关指令
 const LockCmd = "LOCK"
 const UnlockCmd = "UNLOCK"
 const RLockCmd = "RLOCK"
@@ -31,18 +31,19 @@ func Init(opt *redis.Options) error {
 	}
 	opts = opt
 
-	if err := InitLua(); err != nil {
+	if err := LoadLua(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func InitLua() error {
+// 加载 Lua脚本
+func LoadLua() error {
 	hashID, err := Redis.ScriptLoad(lua.ScriptContent).Result()
 	if err != nil {
 		return err
 	}
-	fmt.Println(hashID)
+	// 保存hashID
 	SetShaHasID(hashID)
 	return nil
 
@@ -54,6 +55,8 @@ func SetShaHasID(str string) {
 	shaHashID = str
 }
 
+// responseLock
+// 收到redis的指令回馈
 type responseLock struct {
 	OpRet  bool   `json:"opRet"`
 	ErrMsg string `json:"errMsg"`
@@ -73,6 +76,8 @@ func (r responseLock) Error() string {
 	return r.ErrMsg
 }
 
+// Lock
+// 写锁
 func Lock(key string, uniqID string, expireTime int64) {
 	if len(key) < 0 {
 		panic("lock key is nil")
@@ -98,6 +103,8 @@ func Lock(key string, uniqID string, expireTime int64) {
 	}
 }
 
+// Unlock
+// 写锁的释放
 func Unlock(key, uniqID string) {
 	i := 10
 	for {
@@ -118,6 +125,8 @@ func Unlock(key, uniqID string) {
 	}
 }
 
+// RLock
+// 读锁
 func RLock(key string) {
 	for {
 		res, err := sendLock(GetShaHashID(), key, "", RLockCmd, 0)
@@ -132,6 +141,8 @@ func RLock(key string) {
 	}
 }
 
+// RUnlock
+// 释放读锁
 func RUnlock(key string) {
 	if len(key) <= 0 {
 		panic("runlock nil key")
@@ -153,10 +164,15 @@ func RUnlock(key string) {
 	}
 }
 
+// getRandomSleepTime
+// 随机 睡眠时间
+// 10 - 20 ms
 func getRandomSleepTime() time.Duration {
 	return time.Duration(tool.Rand(10, 20)) * time.Millisecond
 }
 
+// sendLock
+// 发送封装并发送锁指令
 func sendLock(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (*responseLock, error) {
 	var ret interface{}
 	var err error
@@ -180,17 +196,21 @@ func sendLock(shaHashID, key string, uniqID, lockCmd string, expireTime int64) (
 	return &res, nil
 }
 
+// handleError
+// 统一处理错误信息
 func handleError(err error) bool {
 	if err == nil {
 		return false
 	}
 	switch err.Error() {
 	case EofError:
+		// 收到了Eof，redis服务重启
 		if err := handleEofError(); err != nil {
 			return false
 		}
 		return true
 	case NoScriptError:
+		// redis没有找到对应的Lua脚本
 		if err := handleNoScriptError(); err != nil {
 			return false
 		}
@@ -202,11 +222,13 @@ func handleError(err error) bool {
 }
 
 // redis重启
+// 重试初始化一次
 func handleEofError() error {
 	return Init(opts)
 }
 
-// script 不存在
+// Lua script 不存在
+// 重新Load一下Lua
 func handleNoScriptError() error {
-	return InitLua()
+	return LoadLua()
 }

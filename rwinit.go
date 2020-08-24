@@ -80,6 +80,8 @@ type RWMutex struct {
 	retryTime int64
 }
 
+// Init
+// 初始化redis客户端
 func Init(opt *Options) {
 	redisOpts := redis.Options{
 		Network:            opt.Network,
@@ -100,5 +102,8 @@ func Init(opt *Options) {
 		IdleCheckFrequency: opt.IdleCheckFrequency,
 		TLSConfig:          opt.TLSConfig,
 	}
-	client.Init(&redisOpts)
+	// redis属于基础资源 如果redis的客户端初始化失败，直接panic，没得商量
+	if err := client.Init(&redisOpts); err != nil {
+		panic("redis client init ")
+	}
 }
