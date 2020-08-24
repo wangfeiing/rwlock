@@ -19,8 +19,8 @@ import (
 
 func main() {
     
-    // 初始化redisip和端口
-    // 目前仅仅支持单机
+    // 初始化redis客户端，需要传入redis-server的ip和port
+    // 仅支持单机Redis
     rwlock.Init(&rwlock.Options{
         Addr: "127.0.0.1:6379",
     })
